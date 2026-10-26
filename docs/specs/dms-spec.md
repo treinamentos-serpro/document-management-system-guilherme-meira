@@ -1,0 +1,112 @@
+# Especificação - Document Management System
+
+## 1. Objetivo
+
+Disponibilizar uma aplicação web para enviar, listar e baixar documentos, mantendo os arquivos no filesystem local e seus metadados em memória.
+
+## 2. Escopo
+
+### Dentro do escopo
+
+- Upload de documentos por meio da aplicação web.
+- Armazenamento dos arquivos no filesystem local em `backend/storage`, usando multer com `diskStorage`.
+- Registro em memória dos metadados dos documentos.
+- Listagem dos documentos enviados.
+- Download de um documento pelo identificador.
+- Gestão simples de documentos por usuário, sem definir nesta especificação um mecanismo de autenticação ou isolamento.
+- Interface web em React e comunicação com o backend por chamadas `fetch` sob o prefixo `/api`.
+
+### Fora do escopo
+
+- Armazenamento remoto, em nuvem ou em serviços de terceiros.
+- Versionamento de documentos.
+- Persistência durável dos metadados em banco de dados.
+- Definição de autenticação, autorização ou gerenciamento de contas nesta etapa.
+- Definição de limites de tamanho, lista de tipos de arquivo permitidos ou retenção de arquivos.
+
+## 3. Requisitos funcionais
+
+| ID | Requisito | Critério de aceite |
+| --- | --- | --- |
+| RF-01 | O usuário pode enviar um documento por `POST /upload`, como arquivo em uma requisição `multipart/form-data`. | Quando o upload for aceito, o arquivo e gravado localmente e os metadados são registrados em memória. O nome do campo multipart ainda deve ser definido. |
+| RF-02 | O sistema atribui um identificador único a cada documento enviado. | O identificador retornado permite localizar o documento para listagem e download. |
+| RF-03 | O sistema registra os metadados previstos para cada documento. | Os metadados incluem `id`, `originalName`, `size`, `uploadedAt` e `owner`, conforme o modelo de dados. |
+| RF-04 | O usuário pode listar documentos por `GET /documents`. | A resposta contém uma coleção de metadados, sem o conteúdo binário dos arquivos nem caminhos internos do filesystem. |
+| RF-05 | O usuário pode baixar um documento por `GET /documents/:id/download`. | Para um identificador existente, a resposta entrega o conteúdo binário correspondente ao arquivo armazenado localmente. |
+| RF-06 | O sistema identifica falhas de upload, listagem ou download e informa o resultado ao cliente. | O formato comum de erro, os códigos HTTP e o comportamento detalhado para cada falha devem ser definidos antes da implementação dos contratos finais. |
+| RF-07 | A aplicação web consome os endpoints do backend por meio do prefixo `/api`. | O frontend usa o proxy existente do Vite, que encaminha as chamadas ao backend removendo o prefixo `/api`. |
+
+## 4. Requisitos não funcionais
+
+| ID | Requisito |
+| --- | --- |
+| RNF-01 | Os arquivos enviados devem ser gravados exclusivamente no filesystem local da aplicação, em `backend/storage`, por meio de multer configurado com `diskStorage`. |
+| RNF-02 | Os metadados devem permanecer em memória nesta fase; não deve ser introduzido banco de dados ou armazenamento externo. |
+| RNF-03 | A configuração da aplicação deve seguir o princípio 12-Factor e ser fornecida por variáveis de ambiente quando aplicável. |
+| RNF-04 | O backend deve manter as responsabilidades separadas em `routes`, `controllers`, `services` e `repositories`, com dependências no sentido `routes -> controllers -> services -> repositories`. |
+| RNF-05 | O frontend deve usar React com componentes funcionais e Hooks, mantendo a comunicação HTTP em `services/` e usando `fetch`. |
+| RNF-06 | Falhas de entrada HTTP e de leitura ou escrita de arquivos devem ser tratadas nos limites apropriados da aplicação, sem expor detalhes internos do filesystem ao cliente. |
+| RNF-07 | Os metadados mantidos em memória são voláteis: a recuperação depois de reiniciar o processo não e garantida nesta fase. |
+
+## 5. Modelo de dados (metadados do documento)
+
+| Campo | Tipo | Descrição |
+| --- | --- | --- |
+| `id` | string | Identificador único do documento, usado para referenciá-lo na listagem e no download. |
+| `originalName` | string | Nome original informado para o arquivo enviado. |
+| `size` | number | Tamanho do arquivo em bytes. |
+| `uploadedAt` | string | Data e hora do upload em formato ISO 8601. |
+| `owner` | string | Identificador do usuário dono do documento. A origem e a validação deste identificador ainda não estão definidas. |
+
+Os metadados ficam em memória e não possuem garantia de persistência após o encerramento ou reinício do backend. O caminho físico do arquivo é um detalhe interno da persistência local: não deve ser exposto como metadado da API. A estratégia para relacionar `id` ao caminho interno deve ser definida na implementação do repository.
+
+## 6. Contratos de API
+
+Os endpoints abaixo são contratos funcionais preliminares. O proxy do frontend expõe as chamadas como `/api/upload`, `/api/documents` e `/api/documents/:id/download`; no backend, as rotas correspondem a `/upload`, `/documents` e `/documents/:id/download`.
+
+### POST /upload
+
+- **Finalidade:** receber e armazenar um documento.
+- **Entrada prevista:** requisição `multipart/form-data` contendo um arquivo.
+- **Processamento:** gravar o arquivo em `backend/storage` via multer `diskStorage`, gerar um `id` e registrar os metadados em memória.
+- **Saída prevista:** metadados do documento criado (`id`, `originalName`, `size`, `uploadedAt` e `owner`).
+- **Ainda a definir:** nome do campo multipart, código HTTP de sucesso, formato exato do corpo, origem do `owner`, limites e tipos aceitos, e formato/códigos das respostas de erro.
+
+### GET /documents
+
+- **Finalidade:** listar os documentos registrados em memória.
+- **Entrada prevista:** sem parâmetros obrigatórios definidos.
+- **Saída prevista:** coleção de metadados dos documentos; não inclui conteúdo binário nem caminho local.
+- **Ainda a definir:** formato exato do envelope da resposta, ordenação, filtragem por `owner`, código HTTP e respostas de erro.
+
+### GET /documents/:id/download
+
+- **Finalidade:** baixar o arquivo associado ao identificador informado.
+- **Entrada prevista:** `id` no segmento da URL.
+- **Saída prevista:** conteúdo binário do arquivo correspondente.
+- **Ainda a definir:** cabeçalhos de download, código HTTP, formato/código para identificador inexistente e comportamento se o arquivo não puder ser lido.
+
+### Convenções de erro e validação pendentes
+
+Antes de implementar os contratos finais, definir o esquema comum de erro, códigos HTTP, validação de entrada, limites de tamanho, política de tipos de arquivo e nome do campo multipart. Esta especificação não presume valores para essas decisões.
+
+## 7. Decisões arquiteturais
+
+- **Backend:** Node.js e Express em CommonJS. As rotas definem endpoints e delegam aos controllers; controllers tratam HTTP e validação básica; services concentram regras de negócio; repositories encapsulam persistência.
+- **Fluxo de dependências:** `routes -> controllers -> services -> repositories`. Camadas internas não devem depender das camadas externas.
+- **Upload:** multer com `diskStorage` grava arquivos localmente em `backend/storage`. Provedores externos e serviços de upload de terceiros não são permitidos.
+- **Metadados:** mantidos em memória nesta fase inicial; sua perda ao reiniciar o processo e esperada e deve ser comunicada como limitação.
+- **Frontend:** React com Vite, organização por componentes, páginas e serviços. Chamadas ao backend usam `fetch` com prefixo `/api`; o proxy do Vite encaminha ao backend.
+- **Identidade do usuário:** `owner` faz parte do modelo previsto, mas autenticação, origem, validação e regras de acesso permanecem pendentes. A especificação não afirma que existe isolamento entre usuários.
+- **Segurança do filesystem:** nomes originais são metadados de apresentação, não devem ser usados diretamente como caminhos de armazenamento. A estratégia de nome interno e o tratamento de nomes no download devem ser definidos durante a implementação.
+- **Configuracao:** valores de ambiente e caminhos configuráveis devem seguir as convenções 12-Factor, respeitando a pasta local de armazenamento definida pelo projeto.
+
+## 8. Plano de execução
+
+Esta especificação e a única entrega da etapa atual. As etapas abaixo descrevem trabalho futuro e não autorizam a implementação dos arquivos de backend ou frontend nesta etapa.
+
+1. **Resolver decisões pendentes dos contratos:** definir identidade e origem de `owner`, campo multipart, formatos de resposta, códigos HTTP, erros, validações, limites e política de tipos de arquivo.
+2. **Implementar o backend em etapas futuras:** criar rotas, controllers, services e repositories para upload, listagem e download; configurar multer `diskStorage` para `backend/storage`; manter os metadados em memória; adicionar testes para os fluxos e falhas acordados.
+3. **Implementar o frontend em etapa futura:** criar a interface React para upload, listagem e download e encapsular as chamadas `fetch` em `services/`, usando o prefixo `/api`.
+4. **Validar a integracao em etapa futura:** executar os testes do backend, validar o fluxo frontend-backend pelo proxy do Vite e verificar os critérios de aceite dos requisitos funcionais.
+5. **Revisar a especificação conforme decisões aprovadas:** atualizar os contratos e critérios de aceite antes de iniciar as etapas de implementação correspondentes.
