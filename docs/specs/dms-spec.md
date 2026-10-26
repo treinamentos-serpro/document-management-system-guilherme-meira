@@ -67,28 +67,28 @@ Os endpoints abaixo são contratos funcionais preliminares. O proxy do frontend 
 ### POST /upload
 
 - **Finalidade:** receber e armazenar um documento.
-- **Entrada prevista:** requisição `multipart/form-data` contendo um arquivo.
+- **Entrada:** requisição `multipart/form-data` com arquivo no campo `file` e campo `owner` opcional. Quando ausente ou vazio, `owner` recebe o valor `anonymous`.
 - **Processamento:** gravar o arquivo em `backend/storage` via multer `diskStorage`, gerar um `id` e registrar os metadados em memória.
-- **Saída prevista:** metadados do documento criado (`id`, `originalName`, `size`, `uploadedAt` e `owner`).
-- **Ainda a definir:** nome do campo multipart, código HTTP de sucesso, formato exato do corpo, origem do `owner`, limites e tipos aceitos, e formato/códigos das respostas de erro.
+- **Sucesso:** `201 Created`, com os metadados do documento criado (`id`, `originalName`, `size`, `uploadedAt` e `owner`) em JSON.
+- **Erro:** `400 Bad Request` se o arquivo não for enviado ou se o upload for inválido.
+- **Ainda a definir:** limites e tipos de arquivo aceitos. O campo `owner` é apenas metadado fornecido pelo cliente, não uma identidade autenticada.
 
 ### GET /documents
 
 - **Finalidade:** listar os documentos registrados em memória.
 - **Entrada prevista:** sem parâmetros obrigatórios definidos.
-- **Saída prevista:** coleção de metadados dos documentos; não inclui conteúdo binário nem caminho local.
-- **Ainda a definir:** formato exato do envelope da resposta, ordenação, filtragem por `owner`, código HTTP e respostas de erro.
+- **Sucesso:** `200 OK`, com um array de metadados; não inclui conteúdo binário nem caminho local. A listagem não é filtrada por `owner`.
 
 ### GET /documents/:id/download
 
 - **Finalidade:** baixar o arquivo associado ao identificador informado.
 - **Entrada prevista:** `id` no segmento da URL.
-- **Saída prevista:** conteúdo binário do arquivo correspondente.
-- **Ainda a definir:** cabeçalhos de download, código HTTP, formato/código para identificador inexistente e comportamento se o arquivo não puder ser lido.
+- **Sucesso:** `200 OK`, com o conteúdo binário e o nome original como nome de download.
+- **Erro:** `404 Not Found` quando o identificador não existir ou o arquivo local não estiver disponível.
 
 ### Convenções de erro e validação pendentes
 
-Antes de implementar os contratos finais, definir o esquema comum de erro, códigos HTTP, validação de entrada, limites de tamanho, política de tipos de arquivo e nome do campo multipart. Esta especificação não presume valores para essas decisões.
+As respostas de erro usam JSON no formato `{ "error": "mensagem" }`. Upload ausente ou inválido retorna `400`; documento ou arquivo inexistente retorna `404`; falhas inesperadas retornam `500`. Permanecem pendentes a validação adicional de entrada, os limites de tamanho e a política de tipos de arquivo.
 
 ## 7. Decisões arquiteturais
 
@@ -97,16 +97,15 @@ Antes de implementar os contratos finais, definir o esquema comum de erro, códi
 - **Upload:** multer com `diskStorage` grava arquivos localmente em `backend/storage`. Provedores externos e serviços de upload de terceiros não são permitidos.
 - **Metadados:** mantidos em memória nesta fase inicial; sua perda ao reiniciar o processo e esperada e deve ser comunicada como limitação.
 - **Frontend:** React com Vite, organização por componentes, páginas e serviços. Chamadas ao backend usam `fetch` com prefixo `/api`; o proxy do Vite encaminha ao backend.
-- **Identidade do usuário:** `owner` faz parte do modelo previsto, mas autenticação, origem, validação e regras de acesso permanecem pendentes. A especificação não afirma que existe isolamento entre usuários.
+- **Identidade do usuário:** `owner` pode ser informado no multipart e assume `anonymous` quando ausente. Esse valor não é autenticado e não representa controle de acesso; os endpoints não isolam documentos por usuário.
 - **Segurança do filesystem:** nomes originais são metadados de apresentação, não devem ser usados diretamente como caminhos de armazenamento. A estratégia de nome interno e o tratamento de nomes no download devem ser definidos durante a implementação.
 - **Configuracao:** valores de ambiente e caminhos configuráveis devem seguir as convenções 12-Factor, respeitando a pasta local de armazenamento definida pelo projeto.
 
 ## 8. Plano de execução
 
-Esta especificação e a única entrega da etapa atual. As etapas abaixo descrevem trabalho futuro e não autorizam a implementação dos arquivos de backend ou frontend nesta etapa.
+O plano registra a evolução do sistema. O backend de upload, listagem e download foi implementado em suas camadas; as etapas de frontend e integração completa permanecem futuras.
 
-1. **Resolver decisões pendentes dos contratos:** definir identidade e origem de `owner`, campo multipart, formatos de resposta, códigos HTTP, erros, validações, limites e política de tipos de arquivo.
-2. **Implementar o backend em etapas futuras:** criar rotas, controllers, services e repositories para upload, listagem e download; configurar multer `diskStorage` para `backend/storage`; manter os metadados em memória; adicionar testes para os fluxos e falhas acordados.
-3. **Implementar o frontend em etapa futura:** criar a interface React para upload, listagem e download e encapsular as chamadas `fetch` em `services/`, usando o prefixo `/api`.
-4. **Validar a integracao em etapa futura:** executar os testes do backend, validar o fluxo frontend-backend pelo proxy do Vite e verificar os critérios de aceite dos requisitos funcionais.
-5. **Revisar a especificação conforme decisões aprovadas:** atualizar os contratos e critérios de aceite antes de iniciar as etapas de implementação correspondentes.
+1. **Definir políticas restantes:** acordar limites de tamanho, tipos de arquivo e validações adicionais de upload.
+2. **Backend implementado:** rotas, controllers, services e repository cobrem upload, listagem e download; Multer grava em `backend/storage`, e metadados ficam em memória. Testes HTTP cobrem os fluxos principais e erros básicos.
+3. **Implementar o frontend:** criar a interface React para upload, listagem e download e encapsular chamadas `fetch` em `services/`, usando o prefixo `/api`.
+4. **Validar a integração completa:** testar o fluxo frontend-backend pelo proxy do Vite e verificar os critérios de aceite ponta a ponta.
